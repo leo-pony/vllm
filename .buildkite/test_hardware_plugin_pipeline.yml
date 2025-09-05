@@ -2,6 +2,10 @@ steps:
   - command: python -c "print('helloworld')"
     env:
       MY_SPECIAL_BUT_PUBLIC_VALUE: kittens
+    agents:
+      linux-aarch64: "atlas-a2-4cards"
+      queue: "armhardwareplugin"
     plugins:
       - docker#v5.13.0:
           image: ghcr.io/astral-sh/uv:python3.13-alpine
+    
