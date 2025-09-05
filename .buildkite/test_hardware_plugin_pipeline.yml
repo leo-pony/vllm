@@ -7,5 +7,21 @@ steps:
       queue: "armhardwareplugin"
     plugins:
       - docker#v5.13.0:
-          image: ghcr.io/astral-sh/uv:python3.13-alpine
+          image: "quay.io/ascend/cann:8.2.rc1-910b-ubuntu22.04-py3.11"
+          platform: "linux/arm64"
+          volumes:
+            - "/usr/local/dcmi:/usr/local/dcmi"
+            - "/usr/local/bin/npu-smi:/usr/local/bin/npu-smi"
+            - "/usr/local/Ascend/driver/lib64/:/usr/local/Ascend/driver/lib64/"
+            - "/usr/local/Ascend/driver/version.info:/usr/local/Ascend/driver/version.info"
+            - "/etc/ascend_install.info:/etc/ascend_install.info"
+            - "/data/mnj/:/home/mnj/models"
+          devices:
+            - "/dev/davinci0"
+            - "/dev/davinci1"
+            - "/dev/davinci2"
+            - "/dev/davinci3"
+            - "/dev/davinci_manager"
+            - "/dev/devmm_svm"
+            - "/dev/hisi_hdc"
     
