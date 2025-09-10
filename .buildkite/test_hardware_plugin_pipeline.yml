@@ -1,0 +1,8 @@
+steps:
+  - label: "Ascend NPU Test"
+    soft_fail: true
+    depends_on: ~
+    agents:
+      linux-aarch64: "atlas-a2-4cards"
+      queue: "armhardwareplugin"
+    command: bash .buildkite/scripts/hardware_ci/run-npu-test.sh
