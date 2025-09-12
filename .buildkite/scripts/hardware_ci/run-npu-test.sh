@@ -6,10 +6,11 @@ set -ex
 
 image_name="npu/vllm-ci:${BUILDKITE_COMMIT}"
 container_name="npu_${BUILDKITE_COMMIT}_$(tr -dc A-Za-z0-9 < /dev/urandom | head -c 10; echo)"
- 
+pypi_cache_host="${PYPI_CACHE_HOST}"
+
 # Try building the docker image
 # For new agent host should first create cache builder: docker buildx create --name cachebuilder --driver docker-container --use
-DOCKER_BUILDKIT=1 docker build --builder cachebuilder \
+DOCKER_BUILDKIT=1 docker build --add-host cache-service-vllm.nginx-pypi-cache.svc.cluster.local:${pypi_cache_host}  --builder cachebuilder \
   --progress=plain --load -t ${image_name} -f docker/Dockerfile.npu .
 
 # Setup cleanup
