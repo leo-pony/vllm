@@ -5,4 +5,4 @@ steps:
     agents:
       linux-aarch64: "atlas-a2-4cards"
       queue: "armhardwareplugin"
-    command: bash .buildkite/scripts/hardware_ci/run-oot-platform-test.sh
+    command: bash .buildkite/scripts/hardware_ci/run-npu-test.sh

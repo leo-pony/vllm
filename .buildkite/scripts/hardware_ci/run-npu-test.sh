@@ -1,17 +1,70 @@
 #!/bin/bash
 
-# This script build the CPU docker image and run the offline inference inside the container.
+# This script build the Ascend NPU docker image and run the offline inference inside the container.
 # It serves a sanity check for compilation and basic model usage.
 set -ex
 
 image_name="npu/vllm-ci:${BUILDKITE_COMMIT}"
 container_name="npu_${BUILDKITE_COMMIT}_$(tr -dc A-Za-z0-9 < /dev/urandom | head -c 10; echo)"
-pypi_cache_host="${PYPI_CACHE_HOST}"
 
 # Try building the docker image
-# For new agent host should first create cache builder: docker buildx create --name cachebuilder --driver docker-container --use
-DOCKER_BUILDKIT=1 docker build --add-host cache-service-vllm.nginx-pypi-cache.svc.cluster.local:${pypi_cache_host}  --builder cachebuilder \
-  --progress=plain --load -t ${image_name} -f docker/Dockerfile.npu .
+cat <<EOF | DOCKER_BUILDKIT=1 docker build --add-host cache-service-vllm.nginx-pypi-cache.svc.cluster.local:${PYPI_CACHE_HOST} \
+    --builder cachebuilder --progress=plain --load -t ${image_name} -f - .
+FROM quay.io/ascend/cann:8.2.rc1-910b-ubuntu22.04-py3.11
+
+# Define environments
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN pip config set global.index-url http://cache-service-vllm.nginx-pypi-cache.svc.cluster.local:${PYPI_CACHE_PORT}/pypi/simple && \
+    pip config set global.trusted-host cache-service-vllm.nginx-pypi-cache.svc.cluster.local && \
+    apt-get update -y && \
+    apt-get install -y python3-pip git vim wget net-tools gcc g++ cmake libnuma-dev && \
+    rm -rf /var/cache/apt/* && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install for pytest to make the docker build cache layer always valid
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install pytest>=6.0  modelscope
+
+WORKDIR /workspace/vllm
+
+# Install vLLM dependencies in advance. Effect: As long as common.txt remains unchanged, the docker cache layer will be valid.
+COPY requirements/common.txt /workspace/vllm/requirements/common.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements/common.txt
+
+COPY . .
+
+# Install vLLM
+RUN --mount=type=cache,target=/root/.cache/pip \
+    VLLM_TARGET_DEVICE="empty" python3 -m pip install -v -e /workspace/vllm/ --extra-index https://download.pytorch.org/whl/cpu/ && \
+    python3 -m pip uninstall -y triton
+
+# Install vllm-ascend
+WORKDIR /workspace
+ARG VLLM_REPO=https://github.com/vllm-project/vllm-ascend.git
+ARG VLLM_TAG=v0.10.1rc1
+RUN git config --global url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf https://github.com/&& \
+    git clone --depth 1 \$VLLM_REPO --branch \$VLLM_TAG /workspace/vllm-ascend
+
+# Install vllm dependencies in advance. Effect: As long as common.txt remains unchanged, the docker cache layer will be valid.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /workspace/vllm-ascend/requirements.txt
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    export PIP_EXTRA_INDEX_URL=https://mirrors.huaweicloud.com/ascend/repos/pypi && \
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh && \
+    source /usr/local/Ascend/nnal/atb/set_env.sh && \
+    export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/`uname -i`-linux/devlib && \
+    python3 -m pip install -v -e /workspace/vllm-ascend/ --extra-index https://download.pytorch.org/whl/cpu/
+
+ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
+ENV VLLM_USE_MODELSCOPE=True
+
+WORKDIR /workspace/vllm-ascend
+
+CMD ["/bin/bash"]
+EOF
 
 # Setup cleanup
 remove_docker_container() {
