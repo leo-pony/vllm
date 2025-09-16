@@ -10,7 +10,7 @@ container_name="npu_${BUILDKITE_COMMIT}_$(tr -dc A-Za-z0-9 < /dev/urandom | head
 # Try building the docker image
 cat <<EOF | DOCKER_BUILDKIT=1 docker build --add-host cache-service-vllm.nginx-pypi-cache.svc.cluster.local:${PYPI_CACHE_HOST} \
     --builder cachebuilder --progress=plain --load -t ${image_name} -f - .
-FROM quay.io/ascend/cann:8.2.rc1-910b-ubuntu22.04-py3.11
+FROM quay.io/ascend/cann:8.3.rc1.alpha002-910b-ubuntu22.04-py3.11
 
 # Define environments
 ENV DEBIAN_FRONTEND=noninteractive
@@ -43,8 +43,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Install vllm-ascend
 WORKDIR /workspace
 ARG VLLM_REPO=https://github.com/vllm-project/vllm-ascend.git
-ARG VLLM_TAG=v0.10.1rc1
-RUN git config --global url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf https://github.com/&& \
+ARG VLLM_TAG=main
+RUN git config --global url."https://ghfast.top/https://github.com/".insteadOf "https://github.com/" && \
     git clone --depth 1 \$VLLM_REPO --branch \$VLLM_TAG /workspace/vllm-ascend
 
 # Install vllm dependencies in advance. Effect: As long as common.txt remains unchanged, the docker cache layer will be valid.
