@@ -3,6 +3,8 @@ steps:
     soft_fail: true
     depends_on: ~
     agents:
-      linux-aarch64: "atlas-a2-4cards"
-      queue: "armhardwareplugin"
+      queue: "ascend"
     command: bash .buildkite/scripts/hardware_ci/run-npu-test.sh
+    timeout_in_minutes: 20
+    env:
+      BUILDKITE_CLEAN_CHECKOUT: true

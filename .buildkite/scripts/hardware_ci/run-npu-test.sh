@@ -4,12 +4,15 @@
 # It serves a sanity check for compilation and basic model usage.
 set -ex
 
-image_name="npu/vllm-ci:${BUILDKITE_COMMIT}"
+image_name="npu/vllm-ci:${BUILDKITE_COMMIT}_${EPOCHSECONDS}"
 container_name="npu_${BUILDKITE_COMMIT}_$(tr -dc A-Za-z0-9 < /dev/urandom | head -c 10; echo)"
 
 # Try building the docker image
-cat <<EOF | DOCKER_BUILDKIT=1 docker build --add-host cache-service-vllm.nginx-pypi-cache.svc.cluster.local:${PYPI_CACHE_HOST} \
-    --builder cachebuilder --progress=plain --load -t ${image_name} -f - .
+cat <<EOF | DOCKER_BUILDKIT=1 docker build \
+    --add-host cache-service-vllm.nginx-pypi-cache.svc.cluster.local:${PYPI_CACHE_HOST} \
+    --builder cachebuilder --cache-from type=local,src=/mnt/docker-cache \
+                           --cache-to type=local,dest=/mnt/docker-cache,mode=max \
+    --progress=plain --load -t ${image_name} -f - .
 FROM quay.io/ascend/cann:8.3.rc1.alpha002-910b-ubuntu22.04-py3.11
 
 # Define environments
@@ -44,7 +47,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 WORKDIR /workspace
 ARG VLLM_REPO=https://github.com/vllm-project/vllm-ascend.git
 ARG VLLM_TAG=main
-RUN git config --global url."https://ghfast.top/https://github.com/".insteadOf "https://github.com/" && \
+RUN git config --global url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf "https://github.com/" && \
     git clone --depth 1 \$VLLM_REPO --branch \$VLLM_TAG /workspace/vllm-ascend
 
 # Install vllm dependencies in advance. Effect: As long as common.txt remains unchanged, the docker cache layer will be valid.
@@ -74,10 +77,37 @@ remove_docker_container() {
 }
 trap remove_docker_container EXIT
 
+# Generate corresponding --device args based on BUILDKITE_AGENT_NAME
+parse_and_gen_devices() {
+    local input="$1"
+    local index cards_num
+    if [[ "$input" =~ ([0-9]+)-([0-9]+)cards$ ]]; then
+        index="${BASH_REMATCH[1]}"
+        cards_num="${BASH_REMATCH[2]}"
+    else
+        echo "parse error" >&2
+        return 1
+    fi
+
+    local devices=""
+    local i=0
+    while (( i < cards_num )); do
+        local dev_idx=$(((index - 1)*cards_num + i ))
+        devices="$devices --device /dev/davinci${dev_idx}"
+        ((i++))
+    done
+
+    # trim leading space
+    devices="${devices#"${devices%%[![:space:]]*}"}"
+    # Output devices: assigned to the caller variable
+    printf '%s' "$devices"
+}
+
+devices=$(parse_and_gen_devices "${BUILDKITE_AGENT_NAME}") || exit 1
+
 # Run the image and test offline inference/tensor parallel
 docker run \
-    --device /dev/davinci0 \
-    --device /dev/davinci1 \
+    ${devices} \
     --device /dev/davinci_manager \
     --device /dev/devmm_svm \
     --device /dev/hisi_hdc \
