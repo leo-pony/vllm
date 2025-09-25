@@ -1,0 +1,10 @@
+steps:
+  - label: "Ascend NPU Test"
+    soft_fail: true
+    depends_on: ~
+    timeout_in_minutes: 20
+    agents:
+      queue: "ascend"
+    command: http_proxy=127.0.0.1:7890 https_proxy=127.0.0.1:7890 && bash .buildkite/scripts/hardware_ci/run-npu-test.sh
+    env:
+      BUILDKITE_CLEAN_CHECKOUT: true
